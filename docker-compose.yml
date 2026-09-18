@@ -1,0 +1,136 @@
+# ============================================
+# DataCenter — Docker Compose (Production)
+# Launch: docker-compose up --build -d
+# ============================================
+
+services:
+  # ── Core: PostgreSQL ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: dc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-datacenter}
+      POSTGRES_USER: ${POSTGRES_USER:-dcadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./backend/src/models/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./backend/src/models/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dcadmin} -d ${POSTGRES_DB:-datacenter}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dc-internal
+
+  # ── Core: Redis ──
+  redis:
+    image: redis:7-alpine
+    container_name: dc-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dc-internal
+
+  # ── App: Backend API ──
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dc-backend
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${API_PORT:-4000}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4000/api/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - backend_logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - dc-internal
+      - dc-public
+
+  # ── App: Frontend ──
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+        VITE_WS_URL: ""
+    container_name: dc-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - dc-public
+
+  # ── Proxy: 3proxy ──
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: dc-proxy
+    restart: unless-stopped
+    ports:
+      - "3001-3050:3001-3050"
+    volumes:
+      - proxy_logs:/var/log/3proxy
+      - ./proxy/3proxy.cfg:/etc/3proxy/3proxy.cfg:ro
+      - ./proxy/users.txt:/etc/3proxy/users.txt:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 3001 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - dc-public
+
+volumes:
+  pg_data:
+  redis_data:
+  backend_logs:
+  proxy_logs:
+
+networks:
+  dc-internal:
+    internal: true
+  dc-public:
+    driver: bridge

@@ -1,0 +1,18 @@
+[Unit]
+Description=DataCenter Reset API
+After=network.target wg-quick@wg0.service
+Wants=wg-quick@wg0.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/datacenter/reset-api.py
+Restart=always
+RestartSec=5
+# M-06: Run as dedicated user with capabilities
+User=datacenter
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+WorkingDirectory=/opt/datacenter
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+# ============================================
+# Proxy Service: 3proxy
+# ============================================
+services:
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: dc-proxy
+    restart: unless-stopped
+    ports:
+      - "3001-3050:3001-3050"
+    volumes:
+      - proxy_logs:/var/log/3proxy
+      - ./proxy/3proxy.cfg:/etc/3proxy/3proxy.cfg:ro
+      - ./proxy/users.txt:/etc/3proxy/users.txt:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 3001 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - dc-network
+
+volumes:
+  proxy_logs:
+
+networks:
+  dc-network:
+    external: true
+    name: datacenter_dc-network

@@ -1,0 +1,4 @@
+# 3proxy users file
+# Format: username:CL:password
+# CL = cleartext password
+proxyuser:CL:proxypass123

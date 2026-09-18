@@ -1,0 +1,10 @@
+.env
+node_modules/
+backend/logs/*
+frontend/dist/
+backend/data/
+pg_data/
+redis_data/
+*.log
+*.pem
+*.key

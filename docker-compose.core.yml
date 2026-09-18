@@ -1,0 +1,50 @@
+# ============================================
+# Core Services: PostgreSQL + Redis
+# ============================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-datacenter}
+      POSTGRES_USER: ${POSTGRES_USER:-dcadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./backend/src/models/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./backend/src/models/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dcadmin} -d ${POSTGRES_DB:-datacenter}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dc-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: dc-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dc-network
+
+volumes:
+  pg_data:
+  redis_data:
+
+networks:
+  dc-network:
+    driver: bridge
